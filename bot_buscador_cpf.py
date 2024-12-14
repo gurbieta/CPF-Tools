@@ -7,7 +7,6 @@ from webdriver_manager.chrome import ChromeDriverManager
 from selenium.webdriver.common.by import By
 
 continuar = True
-TEMPO_ESPERA = 2  # tempo de espera, por padrão 2 segundos para cada consulta funciona bem.
 
 def setup_driver():
     """Função para configurar o WebDriver (Chrome) sem o modo headless"""
@@ -17,16 +16,10 @@ def setup_driver():
     driver = webdriver.Chrome(service=service, options=options)
     return driver
 
-def obter_nome_usuario():
-    """Função para capturar o nome completo do usuário"""
-    primeiro_nome = input("Digite o primeiro nome da pessoa: ").strip()
-    ultimo_nome = input("Digite o último nome da pessoa: ").strip()
-    return primeiro_nome, ultimo_nome
-
-def verificar_nome(nome_encontrado, primeiro_nome, ultimo_nome, cpf):
+def verificar_nome(nome_encontrado, primeiro_nome, cpf):
     """Função para verificar se o nome encontrado corresponde ao nome do usuário"""
     global continuar
-    if primeiro_nome.lower() in nome_encontrado.lower() and ultimo_nome.lower() in nome_encontrado.lower():
+    if primeiro_nome.lower() in nome_encontrado.lower():
         resposta = input(f"Pessoa encontrada: {nome_encontrado}. Deseja continuar? (Y/N): ").strip().upper()
         if resposta == "N":
             print(f"Nome encontrado: {nome_encontrado}. CPF: {cpf}")
@@ -34,30 +27,43 @@ def verificar_nome(nome_encontrado, primeiro_nome, ultimo_nome, cpf):
         return True
     return False
 
-def consultar_cpf(driver, cpf, captcha, primeiro_nome, ultimo_nome):
+def consultar_cpf(driver, cpf, primeiro_nome):
     """Função para realizar a consulta de CPF e capturar o nome da pessoa"""
-    driver.get("https://www.situacao-cadastral.com/")
-    if captcha:
-        input("Por favor, resolva o CAPTCHA e pressione Enter para continuar...")
+    driver.get("https://servicos.receita.fazenda.gov.br/servicos/cpf/consultasituacao/consultapublica.asp")
 
-    cpf_field = driver.find_element(By.ID, "doc")
+    cpf_field = driver.find_element(By.ID, "txtCPF")
     cpf_field.send_keys(cpf)
-    submit_button = driver.find_element(By.ID, "consultar")
+
+    birth_field = driver.find_element(By.ID, "txtDataNascimento")
+    birth_field.send_keys("15/06/1998")
+
+    time.sleep(1.2)
+
+    driver.switch_to.frame(0)
+
+    captcha_check = driver.find_element(By.ID, "checkbox")
+    captcha_check.click()
+
+    time.sleep(1)
+
+    driver.switch_to.parent_frame()
+
+    submit_button = driver.find_element(By.ID, "id_submit")
     submit_button.click()
-    time.sleep(TEMPO_ESPERA)
+    time.sleep(1)
 
     try:
-        nome_element = driver.find_element(By.CSS_SELECTOR, "span.dados.nome")
+        nome_element = driver.find_element(By.CSS_SELECTOR, "#mainComp > div:nth-child(3) > p > span:nth-child(4)")
         nome = nome_element.text
         print(f"Nome encontrado: {nome}")
-        if not verificar_nome(nome, primeiro_nome, ultimo_nome, cpf):
+        if not verificar_nome(nome, primeiro_nome, cpf):
             return nome, False  # Retorna o nome e uma flag indicando que não houve match
         return nome, True  # Retorna o nome e uma flag indicando que houve match
     except Exception as e:
         print(f"Consulta para o CPF {cpf} falhou ou não retornou nome.")
         return None, False
 
-def processar_lista_cpfs(arquivo_cpfs, captcha, primeiro_nome, ultimo_nome):
+def processar_lista_cpfs(arquivo_cpfs, primeiro_nome):
     """Processa a lista de CPFs"""
     driver = setup_driver()
     
@@ -72,7 +78,7 @@ def processar_lista_cpfs(arquivo_cpfs, captcha, primeiro_nome, ultimo_nome):
             cpf = cpf.strip()
             if cpf:
                 print(f"Consultando CPF: {cpf}")
-                nome, match = consultar_cpf(driver, cpf, captcha, primeiro_nome, ultimo_nome)
+                nome, match = consultar_cpf(driver, cpf, primeiro_nome)
                 if nome:
                     # Salva todos os CPFs e nomes no arquivo 'dados_nome_cpf.txt'
                     arquivo_todos.write(f"{cpf}: {nome}\n")
@@ -86,12 +92,11 @@ def main():
     """Função principal para manipular os argumentos do script"""
     parser = argparse.ArgumentParser(description="Bot para consultar CPFs em https://www.situacao-cadastral.com/")
     parser.add_argument("arquivo_cpfs", help="Caminho para o arquivo contendo a lista de CPFs")
-    parser.add_argument("--captcha", action="store_true", help="Ativa a opção para resolver CAPTCHA manualmente")
     args = parser.parse_args()
     
-    primeiro_nome, ultimo_nome = obter_nome_usuario()
+    primeiro_nome = "NARRIMAN"
     
-    processar_lista_cpfs(args.arquivo_cpfs, args.captcha, primeiro_nome, ultimo_nome)
+    processar_lista_cpfs(args.arquivo_cpfs, primeiro_nome)
 
 if __name__ == "__main__":
     main()
